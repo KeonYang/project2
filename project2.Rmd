@@ -1,0 +1,709 @@
+---
+title: "Project 2"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+# preparation
+
+knitr::opts_chunk$set(echo = TRUE)
+
+## loading all the packages
+
+library(tidyverse)
+library(vcd)
+library(GGally)
+library(MASS)
+library(class)
+library(pROC)
+
+## set work dictionary
+
+setwd("D:/学习/UC Berkeley/Machine Learning/project/project2")
+
+## laoding the data set
+
+data1 <- read.table('image_data/image1.txt')
+data2 <- read.table('image_data/image2.txt')
+data3 <- read.table('image_data/image3.txt')
+
+## change the colnames
+col_names <- c('y' , 'x', 'expert_label', 'NDAI', 'SD', 'CORR', 'DF', 'CF', 'BF', 'AF', 'AN')
+colnames(data1) <- col_names
+colnames(data2) <- col_names
+colnames(data3) <- col_names
+```
+
+
+1.Data Collection and Exploration 
+
+1.1 
+Write a half-page summary of the paper, including at least the purpose of the study, the data, the collection method, its conclusions and potential impact.
+
+```{r}
+
+```
+
+
+1.2 
+Summarize the data, i.e., % of pixels for the different classes. Plot well-labeled beautiful maps using x, y coordinates the expert labels with color of the region based on the expert labels. Do you observe some trend/pattern? Is an i.i.d. assump- tion for the samples justified for this dataset?
+```{r}
+# % of pixels for the different classes/expert labels
+percent_neg1 <- mean(nrow(group_by(filter(data1, expert_label == -1), expert_label))/nrow(data1), nrow(group_by(filter(data2, expert_label == -1), expert_label))/nrow(data2), 
+nrow(group_by(filter(data3, expert_label == -1), expert_label))/nrow(data3))
+
+
+percent_0 <- mean(nrow(group_by(filter(data1, expert_label == 0), expert_label))/nrow(data1),
+nrow(group_by(filter(data2, expert_label == 0), expert_label))/nrow(data2),
+nrow(group_by(filter(data3, expert_label == 0), expert_label))/nrow(data3))
+
+percent_1 <- mean(nrow(group_by(filter(data1, expert_label == 1), expert_label))/nrow(data1),
+nrow(group_by(filter(data2, expert_label == 1), expert_label))/nrow(data2),
+nrow(group_by(filter(data3, expert_label == 1), expert_label))/nrow(data3))
+
+percent_neg1
+percent_0
+percent_1
+
+## summary the data
+summary(group_by(filter(data1, expert_label == -1), expert_label))
+summary(group_by(filter(data1, expert_label == 0), expert_label))
+summary(group_by(filter(data1, expert_label == 1), expert_label))
+
+summary(group_by(filter(data2, expert_label == -1), expert_label))
+summary(group_by(filter(data2, expert_label == 0), expert_label))
+summary(group_by(filter(data2, expert_label == 1), expert_label))
+
+summary(group_by(filter(data1, expert_label == -1), expert_label))
+summary(group_by(filter(data1, expert_label == 0), expert_label))
+summary(group_by(filter(data1, expert_label == 1), expert_label))
+
+
+
+
+## plots for data sets
+
+### plot for image1
+ggplot(data1)+
+  geom_point(aes(x, y, color = expert_label))+
+  ggtitle("Image1") + xlab("X-Coordinate") + ylab("Y-Coordinate")
+
+### plot for image2
+ggplot(data2)+
+  geom_point(aes(x, y, color = expert_label))+
+  ggtitle("Image2") + xlab("X-Coordinate") + ylab("Y-Coordinate")
+
+### plot for image3
+ggplot(data3)+
+  geom_point(aes(x, y, color = expert_label))+
+  ggtitle("Image3") + xlab("X-Coordinate") + ylab("Y-Coordinate") 
+
+print("Pixel Classification for X- and Y- Coordinates of 3 Images")
+
+###  trend
+#### I have found that the trend is not very clear. Amoung all these three plots, we can find that as x and y increase the probability of label1 is increasing at the same time.
+
+## judgement for i.i.d
+
+### image1
+chisq.test(data1$x, data1$NDAI)
+# things seem wired here and I think perhaps we can explain the reason rather than do the i.i.d test.
+
+
+```
+
+
+
+1.3
+Perform a visual and quantitative EDA of the dataset, e.g., summarizing (i) pair- wise relationship between the features themselves and (ii) the relationship between the expert labels with the individual features. Do you notice differences between the two classes (cloud, no cloud) based on the radiance or other features (CORR, NDAI, SD)?
+```{r}
+View(abs(cor(data3)) > 0.5)
+# It seems that NDAI has a high correlation with expert labels and radiances have high correlations wiht each other.
+View(cor(data2))
+View(cor(data3))
+
+dat <- rbind(data1, data2, data3)
+dat <- dat[dat$expert_label != 0, ]
+View(abs(cor(dat)) >0.5)
+
+
+mean1 <- filter(data1, expert_label != 0)%>%
+  group_by(expert_label) %>%
+  summarise(mean_NDAI = mean(NDAI, na.rm = T),
+            mean_SD = mean(SD, na.rm = T),
+            mean_CORR = mean(CORR, na.rm = T),
+            mean_DF = mean(DF, na.rm = T),
+            mean_CF = mean(CF, na.rm = T),
+            mean_BF = mean(BF, na.rm = T),
+            mean_AF = mean(AF, na.rm = T),
+            mean_AN = mean(AN, na.rm = T))
+
+mean2 <- filter(data2, expert_label != 0)%>%
+  group_by(expert_label) %>%
+  summarise(mean_NDAI = mean(NDAI, na.rm = T),
+            mean_SD = mean(SD, na.rm = T),
+            mean_CORR = mean(CORR, na.rm = T),
+            mean_DF = mean(DF, na.rm = T),
+            mean_CF = mean(CF, na.rm = T),
+            mean_BF = mean(BF, na.rm = T),
+            mean_AF = mean(AF, na.rm = T),
+            mean_AN = mean(AN, na.rm = T))
+
+mean3 <- filter(data3, expert_label != 0)%>%
+  group_by(expert_label) %>%
+  summarise(mean_NDAI = mean(NDAI, na.rm = T),
+            mean_SD = mean(SD, na.rm = T),
+            mean_CORR = mean(CORR, na.rm = T),
+            mean_DF = mean(DF, na.rm = T),
+            mean_CF = mean(CF, na.rm = T),
+            mean_BF = mean(BF, na.rm = T),
+            mean_AF = mean(AF, na.rm = T),
+            mean_AN = mean(AN, na.rm = T))
+mean_all <- filter(rbind(data1, data2, data3), expert_label != 0)%>%
+  group_by(expert_label) %>%
+  summarise(mean_NDAI = mean(NDAI, na.rm = T),
+            mean_SD = mean(SD, na.rm = T),
+            mean_CORR = mean(CORR, na.rm = T),
+            mean_DF = mean(DF, na.rm = T),
+            mean_CF = mean(CF, na.rm = T),
+            mean_BF = mean(BF, na.rm = T),
+            mean_AF = mean(AF, na.rm = T),
+            mean_AN = mean(AN, na.rm = T))
+means <- rbind(mean1, mean2, mean3, mean_all)
+
+median1 <- filter(data1, expert_label != 0)%>%
+  group_by(expert_label) %>%
+  summarise(median_NDAI = median(NDAI, na.rm = T),
+            median_SD = median(SD, na.rm = T),
+            median_CORR = median(CORR, na.rm = T),
+            median_DF = median(DF, na.rm = T),
+            median_CF = median(CF, na.rm = T),
+            median_BF = median(BF, na.rm = T),
+            median_AF = median(AF, na.rm = T),
+            median_AN = median(AN, na.rm = T))
+
+median2 <- filter(data2, expert_label != 0)%>%
+  group_by(expert_label) %>%
+  summarise(median_NDAI = median(NDAI, na.rm = T),
+            median_SD = median(SD, na.rm = T),
+            median_CORR = median(CORR, na.rm = T),
+            median_DF = median(DF, na.rm = T),
+            median_CF = median(CF, na.rm = T),
+            median_BF = median(BF, na.rm = T),
+            median_AF = median(AF, na.rm = T),
+            median_AN = median(AN, na.rm = T))
+
+median3 <- filter(data3, expert_label != 0)%>%
+  group_by(expert_label) %>%
+  summarise(median_NDAI = median(NDAI, na.rm = T),
+            median_SD = median(SD, na.rm = T),
+            median_CORR = median(CORR, na.rm = T),
+            median_DF = median(DF, na.rm = T),
+            median_CF = median(CF, na.rm = T),
+            median_BF = median(BF, na.rm = T),
+            median_AF = median(AF, na.rm = T),
+            median_AN = median(AN, na.rm = T))
+
+median_all <- filter(rbind(data1, data2, data3), expert_label != 0)%>%
+  group_by(expert_label) %>%
+  summarise(median_NDAI = median(NDAI, na.rm = T),
+            median_SD = median(SD, na.rm = T),
+            median_CORR = median(CORR, na.rm = T),
+            median_DF = median(DF, na.rm = T),
+            median_CF = median(CF, na.rm = T),
+            median_BF = median(BF, na.rm = T),
+            median_AF = median(AF, na.rm = T),
+            median_AN = median(AN, na.rm = T))
+medians <- rbind(median1, median2, median3, median_all)
+
+
+
+
+
+
+max1 <- filter(data1, expert_label != 0)%>%
+  group_by(expert_label) %>%
+  summarise(max_NDAI = max(NDAI, na.rm = T),
+            max_SD = max(SD, na.rm = T),
+            max_CORR = max(CORR, na.rm = T),
+            max_DF = max(DF, na.rm = T),
+            max_CF = max(CF, na.rm = T),
+            max_BF = max(BF, na.rm = T),
+            max_AF = max(AF, na.rm = T),
+            max_AN = max(AN, na.rm = T))
+
+max2 <- filter(data2, expert_label != 0)%>%
+  group_by(expert_label) %>%
+  summarise(max_NDAI = max(NDAI, na.rm = T),
+            max_SD = max(SD, na.rm = T),
+            max_CORR = max(CORR, na.rm = T),
+            max_DF = max(DF, na.rm = T),
+            max_CF = max(CF, na.rm = T),
+            max_BF = max(BF, na.rm = T),
+            max_AF = max(AF, na.rm = T),
+            max_AN = max(AN, na.rm = T))
+
+max3 <- filter(data3, expert_label != 0)%>%
+  group_by(expert_label) %>%
+  summarise(max_NDAI = max(NDAI, na.rm = T),
+            max_SD = max(SD, na.rm = T),
+            max_CORR = max(CORR, na.rm = T),
+            max_DF = max(DF, na.rm = T),
+            max_CF = max(CF, na.rm = T),
+            max_BF = max(BF, na.rm = T),
+            max_AF = max(AF, na.rm = T),
+            max_AN = max(AN, na.rm = T))
+
+max_all <- filter(rbind(data1, data2, data3), expert_label != 0)%>%
+  group_by(expert_label) %>%
+  summarise(max_NDAI = max(NDAI, na.rm = T),
+            max_SD = max(SD, na.rm = T),
+            max_CORR = max(CORR, na.rm = T),
+            max_DF = max(DF, na.rm = T),
+            max_CF = max(CF, na.rm = T),
+            max_BF = max(BF, na.rm = T),
+            max_AF = max(AF, na.rm = T),
+            max_AN = max(AN, na.rm = T))
+maxs <- rbind(max1, max2, max3, max_all)
+
+
+
+
+
+min1 <- filter(data1, expert_label != 0)%>%
+  group_by(expert_label) %>%
+  summarise(min_NDAI = min(NDAI, na.rm = T),
+            min_SD = min(SD, na.rm = T),
+            min_CORR = min(CORR, na.rm = T),
+            min_DF = min(DF, na.rm = T),
+            min_CF = min(CF, na.rm = T),
+            min_BF = min(BF, na.rm = T),
+            min_AF = min(AF, na.rm = T),
+            min_AN = min(AN, na.rm = T))
+
+min2 <- filter(data2, expert_label != 0)%>%
+  group_by(expert_label) %>%
+  summarise(min_NDAI = min(NDAI, na.rm = T),
+            min_SD = min(SD, na.rm = T),
+            min_CORR = min(CORR, na.rm = T),
+            min_DF = min(DF, na.rm = T),
+            min_CF = min(CF, na.rm = T),
+            min_BF = min(BF, na.rm = T),
+            min_AF = min(AF, na.rm = T),
+            min_AN = min(AN, na.rm = T))
+
+min3 <- filter(data3, expert_label != 0)%>%
+  group_by(expert_label) %>%
+  summarise(min_NDAI = min(NDAI, na.rm = T),
+            min_SD = min(SD, na.rm = T),
+            min_CORR = min(CORR, na.rm = T),
+            min_DF = min(DF, na.rm = T),
+            min_CF = min(CF, na.rm = T),
+            min_BF = min(BF, na.rm = T),
+            min_AF = min(AF, na.rm = T),
+            min_AN = min(AN, na.rm = T))
+
+min_all <- filter(rbind(data1, data2, data3), expert_label != 0)%>%
+  group_by(expert_label) %>%
+  summarise(min_NDAI = min(NDAI, na.rm = T),
+            min_SD = min(SD, na.rm = T),
+            min_CORR = min(CORR, na.rm = T),
+            min_DF = min(DF, na.rm = T),
+            min_CF = min(CF, na.rm = T),
+            min_BF = min(BF, na.rm = T),
+            min_AF = min(AF, na.rm = T),
+            min_AN = min(AN, na.rm = T))
+mins <- rbind(min1, min2, min3, min_all)
+
+
+
+show(means)
+show(medians)
+show(maxs)
+show(mins)
+# because of the results, we can find that for data whose label is -1, both mean and median of NDAI, SD and radiances are smaller than the other, while CORR is smaller. 
+```
+
+```{r}
+# Pairwise plots for visual EDA
+# takes a while to run
+pairs(~ CORR + SD + NDAI + expert_label, data = data1, main = "Image1")    
+pairs(~ CORR + SD + NDAI + expert_label, data = data2, main = "Image2")    
+pairs(~ CORR + SD + NDAI + expert_label, data = data3, main = "Image3")    
+```
+
+
+2 Preparation
+
+2.1
+(Data Split) Split the entire data (image1.txt, image2.txt, image3.txt) into three sets: training, validation and test. Think carefully about how to split the data. Suggest at least two non-trivial different ways of splitting the data which takes into account that the data is not i.i.d.
+```{r}
+data <- rbind(data1, data2, data3)
+data <- filter(data, expert_label != 0)
+len <- nrow(data)
+ratios <- c(0.6, 0.2, 0.2)
+
+set.seed(123456)
+test.index = sample(1:len, ratios[3] * len)
+test <- data[test.index,]
+rest <- data[-test.index,] 
+train.index = sample(1:nrow(rest), ratios[1] * len)
+train <- rest[train.index,]
+validation <- rest[-train.index,]
+
+```
+
+
+2.2
+(Baseline) Report the accuracy of a trivial classiﬁer which sets all labels to -1 (cloud-free) on the validation set and on the test set. In what scenarios will such a classiﬁer have high average accuracy? Hint: Such a step provides a baseline to ensure that the classiﬁcation problems at hand is not trivial.
+```{r}
+trivial.validation <- rep(-1, nrow(validation))
+trivial.test <- rep(-1, nrow(test))
+list(trivial.validation.accuracy = sum(validation$expert_label == trivial.validation)/nrow(validation), trivial.test.accuracy = sum(test$expert_label == trivial.test, na.rm = T)/nrow(test))
+```
+
+
+
+2.3
+(First order importance) Assuming the expert labels as the truth, and without using fancy classiﬁcation methods, suggest three of the “best” features, using quantitative and visual justiﬁcation. Deﬁne your “best” feature criteria clearly. Only the relevant plots are necessary. Be sure to give this careful consideration, as it relates to subsequent problems.
+```{r}
+#  Clear when SD < threshold.SD or CORR > threshold.CORR and NDAI < threshold.NDAI
+ggplot(train)+
+  geom_histogram(aes(NDAI))+
+  facet_wrap(~expert_label)+
+  geom_vline(xintercept = 0.215, color = 'red')
+ggplot(train)+
+  geom_histogram(aes(NDAI))+
+  geom_vline(xintercept = 0.215, color = 'red')
+
+
+
+ggplot(train)+
+  geom_histogram(aes(SD))+
+  facet_wrap(~expert_label)+
+  geom_vline(xintercept = 2.1, color = 'red')
+ggplot(train)+
+  geom_histogram(aes(SD))+
+  geom_vline(xintercept = 2.1, color = 'red')
+
+
+
+ggplot(train)+
+  geom_histogram(aes(CORR))+
+  facet_wrap(~expert_label)+
+  geom_vline(xintercept = 0.195, color = 'red')
+
+ggplot(train)+
+  geom_histogram(aes(CORR))+
+  geom_vline(xintercept = 0.195, color = 'red')
+
+
+# Therefore, we choose to use threshold.SD = 2.1, threshold.CORR = 0.195 and threshold.ND = 0.215
+threshold.SD = 2.1
+threshold.CORR = 0.195
+threshold.NDAI = 0.215
+
+```
+
+
+
+
+
+2.4
+Write a generic cross validation (CV) function CVgeneric in R that takes a generic classiﬁer, training features, training labels, number of folds K and a loss function (at least classiﬁcation accuracy should be there) as inputs and outputs the K-fold CV loss on the training set. Please remember to put it in your github folder in Section 5.
+```{r}
+# Since glm can only deal with data that 0 <= y <= 1, the label needs to be changed before being used
+
+CVgeneric <- function(classifier, features, labels, k, loss.function){
+  
+  # combine the data to make things eaier after CV
+  training <-  cbind(labels, features)
+  
+  num <- nrow(training)
+
+  # define a new function to build k fold
+  CVgroup <- function(k,datasize){
+    cvlist <- list()
+    n <- rep(1:k,ceiling(datasize/k))[1:datasize]        
+    temp <- sample(n,datasize)
+    x <- 1:k
+    dataseq <- 1:datasize
+    cvlist <- lapply(x,function(x) dataseq[temp==x])
+    return(cvlist)
+  }
+  
+  cvlist <- CVgroup(k, num)
+  
+  names <- colnames(training)
+  result = 0
+  for (i in 1:k) {
+    val <- training[cvlist[[i]],]
+    tra <- training[-cvlist[[i]],]
+    classifier.fit <- classifier(as.formula(paste(names[1], paste(names[-1], collapse = '+'), sep = " ~ ")), data = tra, family = binomial)
+    if (identical(classifier,glm)) {
+      glm.probs <- predict(classifier.fit, val, type = "response")
+      glm.pred <- rep(0, length(glm.probs))
+      glm.pred[glm.probs > 0.5] = 1 
+      loss <- mean(glm.pred != val$expert_label)
+    }else{
+      
+    classifier.pred <- predict(classifier.fit, val)
+    loss <- mean(classifier.pred$class != val$expert_label)
+    # loss.function(classifier.pred$class)
+    }
+    result <- result + loss
+  }
+  return(list(error.rate = result / k))
+} 
+# test
+# features <- data[c(4, 5, 6)]
+# labels <- data[3]
+# CVgeneric(qda, features, labels, 5, 1)
+```
+
+
+
+3.Modeling 
+
+
+3.1
+Try several classiﬁcation methods and assess their ﬁt using cross-validation (CV). Provide a commentary on the assumptions for the methods you tried and if they are satisﬁed in this case. Since CV does not have a validation set, you can merge your training and validation set to ﬁt your CV model. Report the accuracies across folds (and not just the average across folds) and the test accuracy. CV-results for both the ways of creating folds (as answered in part 2(a)) should be reported. Provide a brief commentary on the results. Make sure you honestly mention all the classiﬁcation methods you have tried.
+
+```{r}
+# format the data
+
+training <- rbind(train, validation)
+features <- training[c(4, 5, 6)]
+labels <- training[3]
+
+# LDA
+
+lda.fit <- CVgeneric(lda, features, labels, 5, 1)
+
+
+# QDA
+
+qda.fit <- CVgeneric(qda, features, labels, 5, 1)
+
+
+# Logistic Regression
+
+# Since glm needs y to b [0, 1]
+labels[labels == -1,] = 0
+glm.fit <- CVgeneric(glm, features, labels, 5, 1)
+
+
+
+# KNN
+
+# better not to run this part because it's very time-consuming
+errors <- data.frame(k = 1:1, test.error = 0)
+for (k in 1:1) {
+  test.features <- test[c(4, 5, 6)]
+  test.labels <- test[3]$expert_label
+  knn.pred = knn(features, test.features, labels$expert_label, k = k)
+  test.error = (mean(knn.pred != test.labels))
+  errors[k, 2] = test.error
+}
+
+
+
+# SVM
+
+svm.fit <- svm(expert_label~NDAI+SD+CORR, data = cbind(labels, features))
+svm.probs <- predict(svm.fit, val, type = "response")
+svm.pred = rep(0, length(svm.probs))
+svm.pred[svm.probs > 0.5] = 1 
+svm.error = mean(svm.pred != val$expert_label)
+
+```
+
+
+
+
+3.2
+Use ROC curves to compare the diﬀerent methods. Choose a cutoﬀ value and highlight it on the ROC curve. Explain your choice of the cutoﬀ value.
+
+```{r}
+# format the data
+features <- train[c(4, 5, 6)]
+labels <- train[3]
+tra <- cbind(labels, features)
+val <- validation[c(3, 4, 5, 6)]
+names = colnames(tra)
+
+
+# LDA
+
+lda.fit <- lda(as.formula(paste(names[1], paste(names[-1], collapse = '+'), sep = " ~ ")), data = tra, family = binomial)
+lda.probs <- predict(lda.fit, val, type = 'respose')
+
+modelroc <- roc(val$expert_label,lda.probs$posterior[,2])
+plot(modelroc, print.auc=TRUE, auc.polygon=TRUE, grid=c(0.1, 0.2), grid.col=c("green", "red"), max.auc.polygon=TRUE,auc.polygon.col="skyblue", print.thres=TRUE)
+
+# for Q4.3
+lda.predict.data <- validation
+lda.predict.data$predict_label <- lda.probs$class
+lda.predict.error <- mean(lda.probs$class != val$expert_label)
+
+
+# QDA
+
+qda.fit <- qda(as.formula(paste(names[1], paste(names[-1], collapse = '+'), sep = " ~ ")), data = tra, family = binomial)
+qda.probs <- predict(qda.fit, val, type = 'respose')
+
+modelroc <- roc(val$expert_label,qda.probs$posterior[,2])
+plot(modelroc, print.auc=TRUE, auc.polygon=TRUE, grid=c(0.1, 0.2), grid.col=c("green", "red"), max.auc.polygon=TRUE,auc.polygon.col="skyblue", print.thres=TRUE)
+
+# for Q4.3
+qda.predict.data <- validation
+qda.predict.data$predict_label <- qda.probs$class
+
+
+# Logistic Regression
+
+labels[labels == -1,] = 0
+tra = cbind(labels, features)
+glm.fit <- glm(as.formula(paste(names[1], paste(names[-1], collapse = '+'), sep = " ~ ")), data = tra, family = binomial)
+glm.probs <- predict(glm.fit, val, type = "response")
+glm.pred = rep(0, length(glm.probs))
+glm.pred[glm.probs > 0.5] = 1 
+
+modelroc <- roc(val$expert_label,glm.probs)
+plot(modelroc, print.auc=TRUE, auc.polygon=TRUE, grid=c(0.1, 0.2), grid.col=c("green", "red"), max.auc.polygon=TRUE,auc.polygon.col="skyblue", print.thres=TRUE)
+
+# for Q4.3
+val <- validation
+val$expert_label[val$expert_label == -1] = 0
+glm.predict.data <- val
+glm.predict.data$predict_label <- as.factor(glm.pred)
+glm.predict.error <- mean(glm.pred != val$expert_label)
+
+# svm
+
+svm.fit <- svm(expert_label~NDAI+SD+CORR, data = tra)
+svm.probs <- predict(svm.fit, val, type = "response")
+svm.pred = rep(0, length(svm.probs))
+svm.pred[svm.probs > 0.5] = 1 
+
+
+modelroc <- roc(val$expert_label,svm.probs)
+plot(modelroc, print.auc=TRUE, auc.polygon=TRUE, grid=c(0.1, 0.2), grid.col=c("green", "red"), max.auc.polygon=TRUE,auc.polygon.col="skyblue", print.thres=TRUE)
+
+# for Q4.3
+val <- validation
+val$expert_label[val$expert_label == -1] = 0
+svm.predict.data <- val
+svm.predict.data$predict_label <- as.factor(svm.pred)
+svm.predict.error <- mean(svm.pred != val$expert_label)
+svm.predict.data$expert_label <- as.factor(svm.predict.data$expert_label)
+
+```
+
+
+
+3.3
+(Bonus) Assess the ﬁt using other relevant metrics.
+```{r}
+# knn
+test.features <- test[c(4, 5, 6)]
+test.labels <- test[3]$expert_label
+knn.pred = knn(features, test.features, labels$expert_label, k = 3, prob = T)
+prob <- attr(knn.pred, "prob")
+
+
+
+
+
+
+
+
+# decision tree
+rpart.fit <- rpart(as.formula(paste(names[1], paste(names[-1], collapse = '+'), sep = " ~ ")), data = tra, , method = "class")
+rpart.pred <- predict(rpart.fit, val, ,type="prob")
+
+
+```
+
+
+
+
+4.Diagnostics 
+
+
+4.1 
+Do an in-depth analysis of a good classiﬁcation model of your choice by showing some diagnostic plots or information related to convergence or parameter estimation.
+```{r}
+
+# Original
+ggplot(svm.predict.data)+
+  geom_point(aes(x, y, color = expert_label))+
+  ggtitle("Original") + xlab("X-Coordinate") + ylab("Y-Coordinate")
+
+# LDA
+ggplot(lda.predict.data)+
+  geom_point(aes(x, y, color = predict_label))+
+  ggtitle("LDA") + xlab("X-Coordinate") + ylab("Y-Coordinate")
+
+# QDA
+ggplot(qda.predict.data)+
+  geom_point(aes(x, y, color = predict_label))+
+  ggtitle("QDA") + xlab("X-Coordinate") + ylab("Y-Coordinate")
+
+# Logistic Regression 
+ggplot(glm.predict.data)+
+  geom_point(aes(x, y, color = predict_label))+
+  ggtitle("glm") + xlab("X-Coordinate") + ylab("Y-Coordinate")
+
+# SVM
+ggplot(svm.predict.data)+
+  geom_point(aes(x, y, color = predict_label))+
+  ggtitle("SVM") + xlab("X-Coordinate") + ylab("Y-Coordinate")
+
+```
+
+
+
+
+4.2
+For your best classiﬁcation model(s), do you notice any patterns in the misclassiﬁcation errors? Again, use quantitative and visual methods of analysis. Do you notice problems in particular regions, or in speciﬁc ranges of feature values?
+```{r}
+# SVM is the best
+svm.different <- svm.predict.data[svm.predict.data$expert_label != svm.predict.data$predict_label,]
+ggplot(svm.different)+
+  geom_point(aes(x, y, color = predict_label))+
+  ggtitle("SVM") + 
+  xlab("X-Coordinate") + 
+  ylab("Y-Coordinate")
+
+```
+
+
+
+
+4.3
+Based on parts 4(a) and 4(b), can you think of a better classiﬁer? How well do you think your model will work on future data without expert labels?
+```{r}
+
+```
+
+
+
+
+
+4.4
+Do your results in parts 4(a) and 4(b) change as you modify the way of splitting the data?
+```{r}
+
+```
+
+
+
+
+
+4.5
+Write a paragraph for your conclusion.
+
+
+
