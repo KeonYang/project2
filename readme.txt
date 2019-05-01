@@ -1,1 +1,0 @@
-This is the project for STAT 154 in UC Berkeley
