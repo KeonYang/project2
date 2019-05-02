@@ -1,0 +1,55 @@
+---
+title: "CVgeneric function"
+output: html_document
+---
+
+```{r}
+CVgeneric <- function(classifier, features, labels, k, loss.function){
+  
+  # combine the data to make things eaier after CV
+  training <-  cbind(labels, features)
+  
+  num <- nrow(training)
+
+  # define a new function to build k fold
+  CVgroup <- function(k,datasize){
+    cvlist <- list()
+    n <- rep(1:k,ceiling(datasize/k))[1:datasize]        
+    temp <- sample(n,datasize)
+    x <- 1:k
+    dataseq <- 1:datasize
+    cvlist <- lapply(x,function(x) dataseq[temp==x])
+    return(cvlist)
+  }
+  
+  cvlist <- CVgroup(k, num)
+  
+  names <- colnames(training)
+  result = 0
+  for (i in 1:k) {
+    val <- training[cvlist[[i]],]
+    tra <- training[-cvlist[[i]],]
+    if (identical(classifier,glm)) {
+      classifier.fit <- classifier(as.formula(paste(names[1], paste(names[-1], collapse = '+'), sep = " ~ ")), data = tra, family = binomial)
+      glm.probs <- predict(classifier.fit, val, type = "response")
+      glm.pred = rep(0, length(glm.probs))
+      glm.pred[glm.probs > 0.5] = 1 
+      loss = mean(glm.pred != val$expert_label)
+    }else if (identical(classifier, rpart)) {
+      mod <- rpart(expert_label ~ NDAI + SD + CORR, data=tra)
+      p_hat <- fitted(mod)
+      p_pred <- predict(mod, val) 
+      tree.pred <- as.numeric(p_pred>0.5)
+      loss = mean(tree.pred != val$expert_label)
+    }else{
+    classifier.fit <- classifier(as.formula(paste(names[1], paste(names[-1], collapse = '+'), sep = " ~ ")), data = tra)
+    classifier.pred <- predict(classifier.fit, val)
+    loss = mean(classifier.pred$class != val$expert_label)
+    pred <- as.numeric(as.numeric(classifier.pred$class ) >1.5)
+    # loss.function(classifier.pred$class)
+    }
+    result[i] <- loss
+  }
+  return(list(error.rate = result, avg.error = mean(result)))
+} 
+```

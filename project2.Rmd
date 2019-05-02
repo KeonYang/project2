@@ -16,11 +16,15 @@ library(vcd)
 library(GGally)
 library(MASS)
 library(class)
+library(e1071)
 library(pROC)
+library(rpart)
+library(caret)
+library(rpart.plot)
 
 ## set work dictionary
-
-setwd("D:/学习/UC Berkeley/Machine Learning/project/project2")
+setwd("~/Downloads/project2")
+#setwd("D:/学习/UC Berkeley/Machine Learning/project/project2")
 
 ## laoding the data set
 
@@ -108,7 +112,7 @@ print("Pixel Classification for X- and Y- Coordinates of 3 Images")
 
 ### image1
 chisq.test(data1$x, data1$NDAI)
-# things seem wired here and I think perhaps we can explain the reason rather than do the i.i.d test.
+# things seem weird here and I think perhaps we can explain the reason rather than do the i.i.d test.
 
 
 ```
@@ -119,7 +123,7 @@ chisq.test(data1$x, data1$NDAI)
 Perform a visual and quantitative EDA of the dataset, e.g., summarizing (i) pair- wise relationship between the features themselves and (ii) the relationship between the expert labels with the individual features. Do you notice differences between the two classes (cloud, no cloud) based on the radiance or other features (CORR, NDAI, SD)?
 ```{r}
 View(abs(cor(data3)) > 0.5)
-# It seems that NDAI has a high correlation with expert labels and radiances have high correlations wiht each other.
+# It seems that NDAI has a high correlation with expert labels and radiances have high correlations with each other.
 View(cor(data2))
 View(cor(data3))
 
@@ -334,6 +338,7 @@ pairs(~ CORR + SD + NDAI + expert_label, data = data3, main = "Image3")
 ```
 
 
+
 2 Preparation
 
 2.1
@@ -342,6 +347,7 @@ pairs(~ CORR + SD + NDAI + expert_label, data = data3, main = "Image3")
 data <- rbind(data1, data2, data3)
 data <- filter(data, expert_label != 0)
 len <- nrow(data)
+ratios2 <- c(0.7, 0.15, 0.15)
 ratios <- c(0.6, 0.2, 0.2)
 
 set.seed(123456)
@@ -352,6 +358,13 @@ train.index = sample(1:nrow(rest), ratios[1] * len)
 train <- rest[train.index,]
 validation <- rest[-train.index,]
 
+test.index2 = sample(1:len, ratios2[3] * len)
+test2 <- data[test.index2,]
+rest2 <- data[-test.index2,] 
+train.index2 = sample(1:nrow(rest2), ratios2[1] * len)
+train2 <- rest2[train.index2,]
+validation2 <- rest2[-train.index2,]
+
 ```
 
 
@@ -361,18 +374,37 @@ validation <- rest[-train.index,]
 trivial.validation <- rep(-1, nrow(validation))
 trivial.test <- rep(-1, nrow(test))
 list(trivial.validation.accuracy = sum(validation$expert_label == trivial.validation)/nrow(validation), trivial.test.accuracy = sum(test$expert_label == trivial.test, na.rm = T)/nrow(test))
-```
 
+trivial.validation2 <- rep(-1, nrow(validation2))
+trivial.test2 <- rep(-1, nrow(test2))
+list(trivial.validation.accuracy2 = sum(validation2$expert_label == trivial.validation2)/nrow(validation2), trivial.test.accuracy2 = sum(test2$expert_label == trivial.test2, na.rm = T)/nrow(test2))
+```
 
 
 2.3
 (First order importance) Assuming the expert labels as the truth, and without using fancy classiﬁcation methods, suggest three of the “best” features, using quantitative and visual justiﬁcation. Deﬁne your “best” feature criteria clearly. Only the relevant plots are necessary. Be sure to give this careful consideration, as it relates to subsequent problems.
+```{r}
+View(cor(train))
+```
+```{r}
+ggplot(train)+
+  geom_histogram(aes(AF))+
+  facet_wrap(~expert_label)
+ggplot(train2)+
+  geom_histogram(aes(AF))+
+  facet_wrap(~expert_label)
+```
+
 ```{r}
 #  Clear when SD < threshold.SD or CORR > threshold.CORR and NDAI < threshold.NDAI
 ggplot(train)+
   geom_histogram(aes(NDAI))+
   facet_wrap(~expert_label)+
   geom_vline(xintercept = 0.215, color = 'red')
+ggplot(train2)+
+  geom_histogram(aes(NDAI))+
+  facet_wrap(~expert_label)+
+  geom_vline(xintercept = 0.215, color = 'red')
 ggplot(train)+
   geom_histogram(aes(NDAI))+
   geom_vline(xintercept = 0.215, color = 'red')
@@ -382,32 +414,39 @@ ggplot(train)+
 ggplot(train)+
   geom_histogram(aes(SD))+
   facet_wrap(~expert_label)+
-  geom_vline(xintercept = 2.1, color = 'red')
+  geom_vline(xintercept = 2, color = 'red')
+ggplot(train2)+
+  geom_histogram(aes(SD))+
+  facet_wrap(~expert_label)+
+  geom_vline(xintercept = 2, color = 'red')
 ggplot(train)+
   geom_histogram(aes(SD))+
-  geom_vline(xintercept = 2.1, color = 'red')
+  geom_vline(xintercept = 2, color = 'red')
 
 
 
 ggplot(train)+
   geom_histogram(aes(CORR))+
   facet_wrap(~expert_label)+
-  geom_vline(xintercept = 0.195, color = 'red')
-
+  geom_vline(xintercept = 0.18, color = 'red')
 ggplot(train)+
   geom_histogram(aes(CORR))+
-  geom_vline(xintercept = 0.195, color = 'red')
+  facet_wrap(~expert_label)+
+  geom_vline(xintercept = 0.18, color = 'red')
+ggplot(train)+
+  geom_histogram(aes(CORR))+
+  geom_vline(xintercept = 0.18, color = 'red')
 
 
 # Therefore, we choose to use threshold.SD = 2.1, threshold.CORR = 0.195 and threshold.ND = 0.215
-threshold.SD = 2.1
-threshold.CORR = 0.195
+threshold.SD = 2
+threshold.CORR = 0.18
 threshold.NDAI = 0.215
 
 ```
-
-
-
+```{r}
+print("Feature Distributions by Class")
+```
 
 
 2.4
@@ -440,21 +479,28 @@ CVgeneric <- function(classifier, features, labels, k, loss.function){
   for (i in 1:k) {
     val <- training[cvlist[[i]],]
     tra <- training[-cvlist[[i]],]
-    classifier.fit <- classifier(as.formula(paste(names[1], paste(names[-1], collapse = '+'), sep = " ~ ")), data = tra, family = binomial)
     if (identical(classifier,glm)) {
+      classifier.fit <- classifier(as.formula(paste(names[1], paste(names[-1], collapse = '+'), sep = " ~ ")), data = tra, family = binomial)
       glm.probs <- predict(classifier.fit, val, type = "response")
-      glm.pred <- rep(0, length(glm.probs))
+      glm.pred = rep(0, length(glm.probs))
       glm.pred[glm.probs > 0.5] = 1 
-      loss <- mean(glm.pred != val$expert_label)
+      loss = mean(glm.pred != val$expert_label)
+    }else if (identical(classifier, rpart)) {
+      mod <- rpart(expert_label ~ NDAI + SD + CORR, data=tra)
+      p_hat <- fitted(mod)
+      p_pred <- predict(mod, val) 
+      tree.pred <- as.numeric(p_pred>0.5)
+      loss = mean(tree.pred != val$expert_label)
     }else{
-      
+    classifier.fit <- classifier(as.formula(paste(names[1], paste(names[-1], collapse = '+'), sep = " ~ ")), data = tra)
     classifier.pred <- predict(classifier.fit, val)
-    loss <- mean(classifier.pred$class != val$expert_label)
+    loss = mean(classifier.pred$class != val$expert_label)
+    pred <- as.numeric(as.numeric(classifier.pred$class ) >1.5)
     # loss.function(classifier.pred$class)
     }
-    result <- result + loss
+    result[i] <- loss
   }
-  return(list(error.rate = result / k))
+  return(list(error.rate = result, avg.error = mean(result)))
 } 
 # test
 # features <- data[c(4, 5, 6)]
@@ -472,7 +518,6 @@ Try several classiﬁcation methods and assess their ﬁt using cross-validation
 
 ```{r}
 # format the data
-
 training <- rbind(train, validation)
 features <- training[c(4, 5, 6)]
 labels <- training[3]
@@ -507,19 +552,160 @@ for (k in 1:1) {
   errors[k, 2] = test.error
 }
 
-
-
 # SVM
 
-svm.fit <- svm(expert_label~NDAI+SD+CORR, data = cbind(labels, features))
+svm.fit <- svm(expert_label~NDAI+SD+CORR, data = cbind(labels, features), kernel = "linear")
 svm.probs <- predict(svm.fit, val, type = "response")
 svm.pred = rep(0, length(svm.probs))
 svm.pred[svm.probs > 0.5] = 1 
 svm.error = mean(svm.pred != val$expert_label)
 
+tree.fit <- CVgeneric(rpart, features, labels, 5, 1)
 ```
 
 
+
+```{r}
+# test accuracies 
+train$expert_label[train$expert_label ==-1] = 0
+test$expert_label[test$expert_label ==-1] = 0
+probs <- predict(glm(expert_label~NDAI+SD+CORR, data = train, family = binomial), test, type = "response")
+pred = rep(0, length(probs))
+pred[probs > 0.289] = 1 
+glm.accuracy = mean(pred == test$expert_label)
+
+probs <- predict(lda(expert_label~NDAI+SD+CORR, data = train, family = binomial), test, type = "response")
+pred = rep(0, length(probs))
+pred[as.numeric(probs$class) > 1.5] = 1 
+pred[as.numeric(probs$class) < 1.5] = 0
+lda.accuracy = mean(pred == test$expert_label)
+
+probs <- predict(qda(expert_label~NDAI+SD+CORR, data = train, family = binomial), test, type = "response")
+pred = rep(0, length(probs))
+pred[as.numeric(probs$class) > 1.5] = 1 
+pred[as.numeric(probs$class) < 1.5] = 0
+qda.accuracy = mean(pred == test$expert_label)
+
+svm.fit <- svm(expert_label~NDAI+SD+CORR, data = cbind(labels, features), kernel = "linear")
+svm.probs <- predict(svm.fit, test, type = "response")
+svm.pred = rep(0, length(svm.probs))
+svm.pred[svm.probs > 0.5] = 1 
+svm.error = mean(svm.pred != test$expert_label)
+
+probs <- predict(rpart(expert_label~NDAI+SD+CORR, data = train), test)
+pred = rep(0, length(probs))
+pred[probs > 0.5] = 1 
+tree.accuracy = mean(pred == test$expert_label)
+```
+
+```{r}
+glm.fit
+glm.accuracy
+lda.fit
+lda.accuracy
+qda.fit
+qda.accuracy
+errors
+svm.error
+tree.fit
+tree.accuracy
+```
+```{r}
+# format the data
+# 70-15-15
+training <- rbind(train2, validation2)
+features <- training[c(4, 5, 6)]
+labels <- training[3]
+
+# LDA
+
+lda.fit <- CVgeneric(lda, features, labels, 5, 1)
+
+
+# QDA
+
+qda.fit <- CVgeneric(qda, features, labels, 5, 1)
+
+
+# Logistic Regression
+
+# Since glm needs y to b [0, 1]
+labels[labels == -1,] = 0
+glm.fit <- CVgeneric(glm, features, labels, 5, 1)
+
+
+
+# KNN
+
+# better not to run this part because it's very time-consuming
+errors <- data.frame(k = 1:1, test.error = 0)
+for (k in 1:1) {
+  test.features <- test2[c(4, 5, 6)]
+  test.labels <- test2[3]$expert_label
+  knn.pred = knn(features, test.features, labels$expert_label, k = k)
+  test.error = (mean(knn.pred != test.labels))
+  errors[k, 2] = test.error
+}
+
+
+
+# SVM
+
+svm.fit <- svm(expert_label~NDAI+SD+CORR, data = cbind(labels, features), kernel = "linear")
+svm.probs <- predict(svm.fit, val, type = "response")
+svm.pred = rep(0, length(svm.probs))
+svm.pred[svm.probs > 0.5] = 1 
+svm.error = mean(svm.pred != val$expert_label)
+
+tree.fit <- CVgeneric(rpart, features, labels, 5, 1)
+```
+
+
+
+```{r}
+# test accuracies 
+train2$expert_label[train2$expert_label ==-1] = 0
+test2$expert_label[test2$expert_label ==-1] = 0
+probs <- predict(glm(expert_label~NDAI+SD+CORR, data = train2, family = binomial), test2, type = "response")
+pred = rep(0, length(probs))
+pred[probs > 0.289] = 1 
+glm.accuracy = mean(pred == test2$expert_label)
+
+probs <- predict(lda(expert_label~NDAI+SD+CORR, data = train2, family = binomial), test2, type = "response")
+pred = rep(0, length(probs))
+pred[as.numeric(probs$class) > 1.5] = 1 
+pred[as.numeric(probs$class) < 1.5] = 0
+lda.accuracy = mean(pred == test2$expert_label)
+
+probs <- predict(qda(expert_label~NDAI+SD+CORR, data = train2, family = binomial), test2, type = "response")
+pred = rep(0, length(probs))
+pred[as.numeric(probs$class) > 1.5] = 1 
+pred[as.numeric(probs$class) < 1.5] = 0
+qda.accuracy = mean(pred == test2$expert_label)
+
+svm.fit <- svm(expert_label~NDAI+SD+CORR, data = cbind(labels, features), kernel = "linear")
+svm.probs <- predict(svm.fit, test, type = "response")
+svm.pred = rep(0, length(svm.probs))
+svm.pred[svm.probs > 0.5] = 1 
+svm.error = mean(svm.pred != test$expert_label)
+
+probs <- predict(rpart(expert_label~NDAI+SD+CORR, data = train2), test2)
+pred = rep(0, length(probs))
+pred[probs > 0.5] = 1 
+tree.accuracy = mean(pred == test2$expert_label)
+```
+```{r}
+glm.fit
+glm.accuracy
+lda.fit
+lda.accuracy
+qda.fit
+qda.accuracy
+errors
+svm.error
+tree.fit
+tree.accuracy
+```
 
 
 3.2
@@ -527,10 +713,10 @@ Use ROC curves to compare the diﬀerent methods. Choose a cutoﬀ value and hig
 
 ```{r}
 # format the data
-features <- train[c(4, 5, 6)]
-labels <- train[3]
+features <- train2[c(4, 5, 6)]
+labels <- train2[3]
 tra <- cbind(labels, features)
-val <- validation[c(3, 4, 5, 6)]
+val <- validation2[c(3, 4, 5, 6)]
 names = colnames(tra)
 
 
@@ -543,7 +729,7 @@ modelroc <- roc(val$expert_label,lda.probs$posterior[,2])
 plot(modelroc, print.auc=TRUE, auc.polygon=TRUE, grid=c(0.1, 0.2), grid.col=c("green", "red"), max.auc.polygon=TRUE,auc.polygon.col="skyblue", print.thres=TRUE)
 
 # for Q4.3
-lda.predict.data <- validation
+lda.predict.data <- validation2
 lda.predict.data$predict_label <- lda.probs$class
 lda.predict.error <- mean(lda.probs$class != val$expert_label)
 
@@ -557,7 +743,7 @@ modelroc <- roc(val$expert_label,qda.probs$posterior[,2])
 plot(modelroc, print.auc=TRUE, auc.polygon=TRUE, grid=c(0.1, 0.2), grid.col=c("green", "red"), max.auc.polygon=TRUE,auc.polygon.col="skyblue", print.thres=TRUE)
 
 # for Q4.3
-qda.predict.data <- validation
+qda.predict.data <- validation2
 qda.predict.data$predict_label <- qda.probs$class
 
 
@@ -568,13 +754,13 @@ tra = cbind(labels, features)
 glm.fit <- glm(as.formula(paste(names[1], paste(names[-1], collapse = '+'), sep = " ~ ")), data = tra, family = binomial)
 glm.probs <- predict(glm.fit, val, type = "response")
 glm.pred = rep(0, length(glm.probs))
-glm.pred[glm.probs > 0.5] = 1 
+glm.pred[glm.probs > 0.289] = 1 
 
 modelroc <- roc(val$expert_label,glm.probs)
 plot(modelroc, print.auc=TRUE, auc.polygon=TRUE, grid=c(0.1, 0.2), grid.col=c("green", "red"), max.auc.polygon=TRUE,auc.polygon.col="skyblue", print.thres=TRUE)
 
 # for Q4.3
-val <- validation
+val <- validation2
 val$expert_label[val$expert_label == -1] = 0
 glm.predict.data <- val
 glm.predict.data$predict_label <- as.factor(glm.pred)
@@ -585,48 +771,74 @@ glm.predict.error <- mean(glm.pred != val$expert_label)
 svm.fit <- svm(expert_label~NDAI+SD+CORR, data = tra)
 svm.probs <- predict(svm.fit, val, type = "response")
 svm.pred = rep(0, length(svm.probs))
-svm.pred[svm.probs > 0.5] = 1 
+svm.pred[svm.probs > 0.328] = 1 
 
 
 modelroc <- roc(val$expert_label,svm.probs)
 plot(modelroc, print.auc=TRUE, auc.polygon=TRUE, grid=c(0.1, 0.2), grid.col=c("green", "red"), max.auc.polygon=TRUE,auc.polygon.col="skyblue", print.thres=TRUE)
 
 # for Q4.3
-val <- validation
+val <- validation2
 val$expert_label[val$expert_label == -1] = 0
 svm.predict.data <- val
 svm.predict.data$predict_label <- as.factor(svm.pred)
 svm.predict.error <- mean(svm.pred != val$expert_label)
 svm.predict.data$expert_label <- as.factor(svm.predict.data$expert_label)
 
+# Decision Trees
+
+tree.fit <- rpart(as.formula(paste(names[1], paste(names[-1], collapse = '+'), sep = " ~ ")), data = tra)
+tree.probs <- predict(tree.fit, val)
+tree.pred = rep(0, length(glm.probs))
+tree.pred[tree.probs > 0.5] = 1 
+
+# for Q4.3
+val <- validation2
+val$expert_label[val$expert_label == -1] = 0
+tree.predict.data <- val
+tree.predict.data$predict_label <- as.factor(tree.pred)
+tree.predict.error <- mean(tree.pred != val$expert_label)
+tree.predict.data$expert_label <- as.factor(val$expert_label)
+
+modelroc <- roc(val$expert_label,tree.pred)
+plot(modelroc, print.auc=TRUE, auc.polygon=TRUE, grid=c(0.1, 0.2), grid.col=c("green", "red"), max.auc.polygon=TRUE,auc.polygon.col="skyblue", print.thres=TRUE)
 ```
-
-
+```{r}
+print("LDA: cutoff = 0.252")
+print("QDA: cutoff = 0.195")
+print("GLM: cutoff = 0.289")
+print("DT: cutoff = 0.500")
+print("SVM: cutoff = 0.328")
+print("ROC Curves")
+```
 
 3.3
 (Bonus) Assess the ﬁt using other relevant metrics.
 ```{r}
 # knn
-test.features <- test[c(4, 5, 6)]
-test.labels <- test[3]$expert_label
-knn.pred = knn(features, test.features, labels$expert_label, k = 3, prob = T)
-prob <- attr(knn.pred, "prob")
-
-
-
-
-
-
-
-
-# decision tree
-rpart.fit <- rpart(as.formula(paste(names[1], paste(names[-1], collapse = '+'), sep = " ~ ")), data = tra, , method = "class")
-rpart.pred <- predict(rpart.fit, val, ,type="prob")
-
-
+#test.features <- test[c(4, 5, 6)]
+#test.labels <- test[3]$expert_label
+#knn.pred = knn(features, test.features, labels$expert_label, k = 3, prob = T)
+#prob <- attr(knn.pred, "prob")
 ```
 
 
+```{r}
+confusionMatrix(lda.probs$class, as.factor(val$expert_label))
+```
+```{r}
+confusionMatrix(qda.probs$class, as.factor(val$expert_label))
+```
+```{r}
+confusionMatrix(as.factor(glm.pred), as.factor(val$expert_label))
+```
+
+```{r}
+confusionMatrix(as.factor(svm.pred), as.factor(val$expert_label))
+```
+```{r}
+confusionMatrix(as.factor(tree.pred), as.factor(val$expert_label))
+```
 
 
 4.Diagnostics 
@@ -635,11 +847,15 @@ rpart.pred <- predict(rpart.fit, val, ,type="prob")
 4.1 
 Do an in-depth analysis of a good classiﬁcation model of your choice by showing some diagnostic plots or information related to convergence or parameter estimation.
 ```{r}
+print("Algorithm Predictions Colored by Expert_Label")
+```
+
+```{r}
 
 # Original
 ggplot(svm.predict.data)+
-  geom_point(aes(x, y, color = expert_label))+
-  ggtitle("Original") + xlab("X-Coordinate") + ylab("Y-Coordinate")
+geom_point(aes(x, y, color = expert_label))+
+ggtitle("Original") + xlab("X-Coordinate") + ylab("Y-Coordinate")
 
 # LDA
 ggplot(lda.predict.data)+
@@ -659,12 +875,41 @@ ggplot(glm.predict.data)+
 # SVM
 ggplot(svm.predict.data)+
   geom_point(aes(x, y, color = predict_label))+
-  ggtitle("SVM") + xlab("X-Coordinate") + ylab("Y-Coordinate")
+ ggtitle("SVM") + xlab("X-Coordinate") + ylab("Y-Coordinate")
+
+#DT
+ggplot(tree.predict.data)+
+  geom_point(aes(x, y, color = predict_label))+
+  ggtitle("Decision Tree") + xlab("X-Coordinate") + ylab("Y-Coordinate")
 
 ```
-
-
-
+```{r}
+summary(tree.fit)
+```
+```{r}
+rpart.plot(tree.fit)
+```
+```{r}
+get_node_date <- function(tree = fit, node = 5){
+  rule <- path.rpart(tree, node)
+  rule_2 <- sapply(rule[[1]][-1], function(x) strsplit(x, '(?<=[><=])(?=[^><=])|(?<=[^><=])(?=[><=])', perl = TRUE))
+  ind <- apply(do.call(cbind, lapply(rule_2, function(x) eval(call(x[2], tra[,x[1]], as.numeric(x[3]))))), 1, all)
+  tra[ind,]
+  }
+```
+```{r}
+dt4 <- get_node_date(tree.fit, 4)
+summary(dt4)
+dt5 <- get_node_date(tree.fit, 5)
+summary(dt5)
+dt6 <- get_node_date(tree.fit, 6)
+summary(dt6)
+dt7 <- get_node_date(tree.fit, 7)
+summary(dt7)
+boxplot(dt4$NDAI, dt5$NDAI, dt6$NDAI, dt7$NDAI, main = "NDAI at Nodes 4:7")
+boxplot(dt4$SD, dt5$SD, dt6$SD, dt7$SD, main = "SD at Nodes 4:7")
+boxplot(dt4$CORR, dt5$CORR, dt6$CORR, dt7$CORR, main = "CORR at Nodes 4:7")
+```
 
 4.2
 For your best classiﬁcation model(s), do you notice any patterns in the misclassiﬁcation errors? Again, use quantitative and visual methods of analysis. Do you notice problems in particular regions, or in speciﬁc ranges of feature values?
@@ -676,7 +921,20 @@ ggplot(svm.different)+
   ggtitle("SVM") + 
   xlab("X-Coordinate") + 
   ylab("Y-Coordinate")
+qda.predict.data$expert_label[qda.predict.data$expert_label == -1] <- 0
+qda.different <- qda.predict.data[qda.predict.data$expert_label != qda.predict.data$predict_label,]
+ggplot(qda.different)+
+  geom_point(aes(x, y, color = predict_label))+
+  ggtitle("QDA") + 
+  xlab("X-Coordinate") + 
+  ylab("Y-Coordinate")
 
+tree.different <- tree.predict.data[tree.predict.data$expert_label != tree.predict.data$predict_label,]
+ggplot(tree.different)+
+  geom_point(aes(x, y, color = predict_label))+
+  ggtitle("Decision Tree") + 
+  xlab("X-Coordinate") + 
+  ylab("Y-Coordinate")
 ```
 
 
@@ -685,25 +943,129 @@ ggplot(svm.different)+
 4.3
 Based on parts 4(a) and 4(b), can you think of a better classiﬁer? How well do you think your model will work on future data without expert labels?
 ```{r}
+features <- train2[c(1, 4, 5, 6)]
+labels <- train2[3]
+tra <- cbind(labels, features)
+val <- validation2[c(1, 3, 4, 5, 6)]
+names = colnames(tra)
 
+tree.fit <- rpart(as.formula(paste(names[1], paste(names[-1], collapse = '+'), sep = " ~ ")), data = tra)
+tree.probs <- predict(tree.fit, val)
+tree.pred = rep(0, length(glm.probs))
+tree.pred[tree.probs > 0.5] = 1 
+
+val <- validation2
+val$expert_label[val$expert_label == -1] = 0
+tree.predict.data <- val
+tree.predict.data$predict_label <- as.factor(tree.pred)
+tree.predict.error <- mean(tree.pred != val$expert_label)
+tree.predict.data$expert_label <- as.factor(val$expert_label)
+
+
+tree.different <- tree.predict.data[tree.predict.data$expert_label != tree.predict.data$predict_label,]
+ggplot(tree.different)+
+  geom_point(aes(x, y, color = predict_label))+
+  ggtitle("Decision Tree") + 
+  xlab("X-Coordinate") + 
+  ylab("Y-Coordinate")
+
+confusionMatrix(as.factor(tree.pred), as.factor(val$expert_label))
 ```
-
-
-
-
 
 4.4
 Do your results in parts 4(a) and 4(b) change as you modify the way of splitting the data?
 ```{r}
+features <- train[c(4, 5, 6)]
+labels <- train[3]
+tra <- cbind(labels, features)
+val <- validation[c(3, 4, 5, 6)]
+names = colnames(tra)
 
+
+svm.fit <- svm(expert_label~NDAI+SD+CORR, data = tra)
+svm.probs <- predict(svm.fit, val, type = "response")
+svm.pred = rep(0, length(svm.probs))
+svm.pred[svm.probs > 0.328] = 1 
+
+qda.fit <- qda(as.formula(paste(names[1], paste(names[-1], collapse = '+'), sep = " ~ ")), data = tra, family = binomial)
+qda.probs <- predict(qda.fit, val, type = 'respose')
+
+tree.fit <- rpart(as.formula(paste(names[1], paste(names[-1], collapse = '+'), sep = " ~ ")), data = tra)
+tree.probs <- predict(tree.fit, val)
+tree.pred = rep(0, length(glm.probs))
+tree.pred[tree.probs > 0.5] = 1 
+
+
+val <- validation
+val$expert_label[val$expert_label == -1] = 0
+svm.predict.data <- val
+svm.predict.data$predict_label <- as.factor(svm.pred)
+svm.predict.error <- mean(svm.pred != val$expert_label)
+svm.predict.data$expert_label <- as.factor(svm.predict.data$expert_label)
+
+val <- validation
+val$expert_label[val$expert_label == -1] = 0
+tree.predict.data <- val
+tree.predict.data$predict_label <- as.factor(tree.pred)
+tree.predict.error <- mean(tree.pred != val$expert_label)
+tree.predict.data$expert_label <- as.factor(val$expert_label)
+
+qda.predict.data <- validation
+qda.predict.data$predict_label <- qda.probs$class
+
+svm.different <- svm.predict.data[svm.predict.data$expert_label != svm.predict.data$predict_label,]
+ggplot(svm.different)+
+  geom_point(aes(x, y, color = predict_label))+
+  ggtitle("SVM") + 
+  xlab("X-Coordinate") + 
+  ylab("Y-Coordinate")
+qda.predict.data$expert_label[qda.predict.data$expert_label == -1] <- 0
+qda.different <- qda.predict.data[qda.predict.data$expert_label != qda.predict.data$predict_label,]
+ggplot(qda.different)+
+  geom_point(aes(x, y, color = predict_label))+
+  ggtitle("QDA") + 
+  xlab("X-Coordinate") + 
+  ylab("Y-Coordinate")
+
+tree.different <- tree.predict.data[tree.predict.data$expert_label != tree.predict.data$predict_label,]
+ggplot(tree.different)+
+  geom_point(aes(x, y, color = predict_label))+
+  ggtitle("Decision Tree") + 
+  xlab("X-Coordinate") + 
+  ylab("Y-Coordinate")
 ```
 
-
-
+```{r}
+confusionMatrix(qda.probs$class, as.factor(val$expert_label))
+```
+```{r}
+confusionMatrix(as.factor(svm.pred), as.factor(val$expert_label))
+```
+```{r}
+confusionMatrix(as.factor(tree.pred), as.factor(val$expert_label))
+```
+```{r}
+dt4 <- get_node_date(tree.fit, 4)
+summary(dt4)
+dt5 <- get_node_date(tree.fit, 5)
+summary(dt5)
+dt6 <- get_node_date(tree.fit, 6)
+summary(dt6)
+dt7 <- get_node_date(tree.fit, 7)
+summary(dt7)
+boxplot(dt4$NDAI, dt5$NDAI, dt6$NDAI, dt7$NDAI, main = "NDAI at Nodes 4:7")
+boxplot(dt4$SD, dt5$SD, dt6$SD, dt7$SD, main = "SD at Nodes 4:7")
+boxplot(dt4$CORR, dt5$CORR, dt6$CORR, dt7$CORR, main = "CORR at Nodes 4:7")
+```
+```{r}
+rpart.plot(tree.fit)
+```
 
 
 4.5
 Write a paragraph for your conclusion.
+
+
 
 
 
